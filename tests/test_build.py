@@ -60,7 +60,7 @@ def test_findings_mention_the_numbers():
     df = frame(rows)
     _, f, mirror, share = build.build_view(df, ["854232"])
     text = " ".join(build.findings("Memory chips", f, mirror, share))
-    assert "$12.0B" in text and "0% up" in text
+    assert "$12.0B of memory chips" in text and "0% more" in text
 
 
 def test_fetch_stops_at_quota_and_saves_progress(tmp_path, monkeypatch):

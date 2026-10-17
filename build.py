@@ -114,10 +114,11 @@ def findings(label, frame, mirror, share):
     china_now, china_then = at(frame["China"], latest), at(frame["China"], year_ago)
     change = pct(china_now, china_then)
     if change is not None:
+        goods = label.lower().removeprefix("all ")
         out.append(
-            f"Korea's {label.lower()} exports to China were ${china_now / 1e9:.1f}B in the "
-            f"12 months to {latest.strftime("%b %Y")}, {abs(change):.0f}% {'up' if change >= 0 else 'down'} "
-            f"on the year before."
+            f"Korea shipped ${china_now / 1e9:.1f}B of {goods} straight to China in the "
+            f"12 months to {latest.strftime("%b %Y")}, {abs(change):.0f}% {'more' if change >= 0 else 'less'} "
+            f"than the year before."
         )
 
     share_now, share_base = at(share, latest), at(share, BASELINE_END)
