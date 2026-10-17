@@ -61,3 +61,27 @@ def test_findings_mention_the_numbers():
     _, f, mirror, share = build.build_view(df, ["854232"])
     text = " ".join(build.findings("Memory chips", f, mirror, share))
     assert "$12.0B" in text and "0% up" in text
+
+
+def test_fetch_batches_months_and_stops_on_quota(tmp_path, monkeypatch):
+    calls = []
+
+    def fake_request(query, periods):
+        calls.append((query["reporter"], list(periods)))
+        if len(calls) == 3:
+            raise fetch.QuotaExceeded("Quota Exceeded")
+        return [{"period": p, "partnerCode": query["partners"][0], "cmdCode": "854232",
+                 "primaryValue": 1.0} for p in periods]
+
+    monkeypatch.setattr(fetch, "request", fake_request)
+    monkeypatch.setattr(fetch, "CACHE", tmp_path / "comtrade.csv")
+    monkeypatch.setattr(fetch, "PAUSE_SECONDS", 0)
+    monkeypatch.setattr(fetch.config, "START_PERIOD", "202001")
+    fetch.main()
+
+    china, korea = fetch.config.QUERIES
+    assert fetch.months_per_call(china) == 12 and fetch.months_per_call(korea) == 8
+    assert [len(p) for _, p in calls[:2]] == [12, 12]
+    assert len(calls) == 3  # stopped at the quota instead of hammering the API
+    saved = (tmp_path / "comtrade.csv").read_text().splitlines()
+    assert len(saved) == 1 + 24 and saved[1].startswith("202001,156,M,410,854232")

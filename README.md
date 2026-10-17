@@ -37,7 +37,7 @@ All values are 12-month rolling sums.
 
 ```
 pip install pandas pytest
-python fetch.py     # first run takes ~5 minutes
+python fetch.py     # a few dozen calls; the free API has a daily limit
 python build.py
 python -m http.server -d _site 8000   # open http://localhost:8000
 ```

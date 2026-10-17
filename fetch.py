@@ -1,8 +1,9 @@
 """Download monthly trade data from the UN Comtrade public API into data/comtrade.csv.
 
-Uses the free preview endpoint (no API key). Months already in the cache are
-skipped unless they fall inside the REFRESH_MONTHS revision window, so a
-weekly run only makes a few dozen requests.
+Uses the free preview endpoint (no API key), which allows a limited number of
+calls per day. Each call asks for several months at once, and months already
+in the cache are skipped unless they fall inside the REFRESH_MONTHS revision
+window, so a weekly run makes only a handful of calls.
 """
 
 import csv
@@ -21,6 +22,7 @@ API = "https://comtradeapi.un.org/public/v1/preview/C/M/HS"
 CACHE = Path(__file__).parent / "data" / "comtrade.csv"
 FIELDS = ["period", "reporter", "flow", "partner", "cmd", "value_usd", "net_kg"]
 PAUSE_SECONDS = 1.5
+MAX_ROWS = 500  # the public preview API returns at most this many rows per call
 
 
 def months(start, end):
@@ -33,11 +35,15 @@ def months(start, end):
     return out
 
 
-def request(query, period):
-    """One API call: one reporter, one month, all partners and products."""
+class QuotaExceeded(Exception):
+    """The free API's daily request allowance is used up."""
+
+
+def request(query, periods):
+    """One API call: one reporter, several months, all partners and products."""
     params = {
         "reporterCode": query["reporter"],
-        "period": period,
+        "period": ",".join(periods),
         "partnerCode": ",".join(map(str, query["partners"])),
         "cmdCode": ",".join(config.PRODUCTS),
         "flowCode": query["flow"],
@@ -50,24 +56,29 @@ def request(query, period):
     for attempt in range(5):
         try:
             with urllib.request.urlopen(url, timeout=120) as resp:
-                return json.load(resp).get("data") or []
+                body = json.load(resp)
+            if body.get("count", 0) >= MAX_ROWS:
+                raise RuntimeError("hit the 500-row cap; lower MONTHS_PER_CALL")
+            return body.get("data") or []
         except urllib.error.HTTPError as err:
+            if err.code == 403:
+                raise QuotaExceeded(err.reason) from err
             if err.code not in (429, 500, 502, 503, 504):
                 raise
         except (urllib.error.URLError, TimeoutError):
             pass
         time.sleep(2 ** (attempt + 2))
-    raise RuntimeError(f"gave up on {query['reporter']} {period}")
+    raise RuntimeError(f"gave up on {query['reporter']} {periods[0]}-{periods[-1]}")
 
 
-def to_rows(records, query, period):
+def to_rows(records, query):
     rows = []
     for r in records:
         value = r.get("primaryValue")
         if value is None:
             continue
         rows.append({
-            "period": period,
+            "period": str(r["period"]),
             "reporter": query["reporter"],
             "flow": query["flow"],
             "partner": r["partnerCode"],
@@ -76,6 +87,12 @@ def to_rows(records, query, period):
             "net_kg": r.get("netWgt") or "",
         })
     return rows
+
+
+def months_per_call(query):
+    """As many months as fit under the API's 500-row cap."""
+    per_month = len(query["partners"]) * len(config.PRODUCTS)
+    return max(1, min(12, (MAX_ROWS - 1) // per_month))
 
 
 def load_cache():
@@ -93,44 +110,44 @@ def main():
 
     cached = load_cache()
     have = {(r["reporter"], r["period"]) for r in cached}
-    fetched, failures = [], 0
-    todo = {}
+    fetched, failures, quota_hit = [], 0, False
     for q in config.QUERIES:
-        todo[q["reporter"]] = [
-            p for p in all_months if p in refresh or (str(q["reporter"]), p) not in have
-        ]
-
-    for q in config.QUERIES:
-        for period in todo[q["reporter"]]:
+        todo = [p for p in all_months if p in refresh or (str(q["reporter"]), p) not in have]
+        step = months_per_call(q)
+        for i in range(0, len(todo), step):
+            chunk = todo[i:i + step]
             try:
-                records = request(q, period)
-            except Exception as err:  # keep going; the old cache still covers this month
-                print(f"  failed {q['reporter']} {period}: {err}", file=sys.stderr)
+                rows = to_rows(request(q, chunk), q)
+            except QuotaExceeded:
+                quota_hit = True
+                break
+            except Exception as err:  # keep going; the old cache still covers these months
+                print(f"  failed {q['reporter']} {chunk[0]}-{chunk[-1]}: {err}", file=sys.stderr)
                 failures += 1
                 continue
-            rows = to_rows(records, q, period)
-            fetched.append(((str(q["reporter"]), period), rows))
-            print(f"  {q['reporter']} {period}: {len(rows)} rows")
+            fetched.extend(rows)
+            print(f"  {q['reporter']} {chunk[0]}-{chunk[-1]}: {len(rows)} rows")
             time.sleep(PAUSE_SECONDS)
+        if quota_hit:
+            break
 
     # A month that came back empty keeps whatever the cache had for it.
-    replaced = {key for key, rows in fetched if rows}
+    replaced = {(str(r["reporter"]), r["period"]) for r in fetched}
     keep = [r for r in cached if (r["reporter"], r["period"]) not in replaced]
-    for _, rows in fetched:
-        keep.extend(rows)
+    keep.extend(fetched)
     keep.sort(key=lambda r: (str(r["reporter"]), r["period"], str(r["partner"]), r["cmd"]))
 
     if not keep:
         sys.exit("No data at all: the API may be down. Nothing written.")
-    requested = sum(len(v) for v in todo.values())
-    if requested and failures > requested / 2:
-        sys.exit(f"{failures} of {requested} requests failed; keeping the old cache.")
+    if quota_hit:
+        # Progress so far is saved; the next run picks up the missing months.
+        print("::warning::UN Comtrade daily quota reached; the rest will be fetched next run.")
     CACHE.parent.mkdir(exist_ok=True)
     with CACHE.open("w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=FIELDS)
         w.writeheader()
         w.writerows(keep)
-    print(f"Wrote {len(keep)} rows to {CACHE} ({failures} failed requests)")
+    print(f"Wrote {len(keep)} rows to {CACHE} ({failures} failed calls)")
 
 
 if __name__ == "__main__":

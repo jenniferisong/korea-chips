@@ -48,9 +48,11 @@ PRODUCTS = {
 }
 
 # Two download jobs: what Korea says it shipped, and what China says it got.
+# China first: it is the smaller download, so a run cut short by the API's daily
+# quota still fills in both sides over successive runs.
 QUERIES = [
-    {"reporter": KOREA, "flow": "X", "partners": list(DESTINATIONS)},
     {"reporter": CHINA, "flow": "M", "partners": [KOREA]},
+    {"reporter": KOREA, "flow": "X", "partners": list(DESTINATIONS)},
 ]
 
 # US policy events drawn as markers on every chart.
