@@ -100,7 +100,14 @@ def build_view(df, cmds):
         "world": clean(frame["World"]),
         "mirror": clean(mirror),
         "china_hk_share": clean(share * 100),
+        "mirror_baseline": mirror_baseline(mirror),
     }, frame, mirror, share
+
+
+def mirror_baseline(mirror):
+    """Average pre-control mirror ratio. The ratio swings, so a single month would mislead."""
+    before = mirror[mirror.index <= pd.Period(BASELINE_END, freq="M")].dropna()
+    return float(before.mean()) if not before.empty else None
 
 
 def findings(label, frame, mirror, share):
@@ -140,12 +147,12 @@ def findings(label, frame, mirror, share):
     m_valid = mirror.dropna()
     if not m_valid.empty:
         m_month = m_valid.index[-1]
-        m_now, m_base = float(m_valid.iloc[-1]), at(mirror, BASELINE_END)
+        m_now, m_base = float(m_valid.iloc[-1]), mirror_baseline(mirror)
         line = (
             f"China records ${m_now:.2f} of Korean-made imports for every $1 Korea says it "
             f"shipped to China directly (12 months to {m_month.strftime("%b %Y")})"
         )
-        line += f", against ${m_base:.2f} before the controls." if m_base else "."
+        line += f", against an average of ${m_base:.2f} before the controls." if m_base else "."
         out.append(line)
     return out
 

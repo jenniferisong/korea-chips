@@ -330,7 +330,7 @@ function tiles(v) {
   $("tiles").innerHTML =
     card("Exports to China, last 12 months", fmtB(cn), ci >= 0 ? `to ${monthName(v.dates[ci])} · before controls ${fmtB(at(v.destinations["China"], base))}` : "") +
     card("Share to China + Hong Kong", fmtPct(sh), si >= 0 ? `before controls ${fmtPct(at(v.china_hk_share, base))}` : "") +
-    card("Mirror ratio", fmtX(mr), mi >= 0 ? `to ${monthName(v.dates[mi])} · before controls ${fmtX(at(v.mirror, base))}` : "");
+    card("Mirror ratio", fmtX(mr), mi >= 0 ? `to ${monthName(v.dates[mi])} · pre-control average ${fmtX(v.mirror_baseline)}` : "");
 }
 
 function render() {

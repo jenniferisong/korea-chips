@@ -53,6 +53,7 @@ def test_mirror_ratio():
     rows += [(p, 156, "M", 410, "854232", 15.0) for p in fetch.months("202001", "202012")]
     data, *_ = build.build_view(frame(rows), ["854232"])
     assert data["mirror"][-1] == 1.5
+    assert data["mirror_baseline"] == 1.5
 
 
 def test_findings_mention_the_numbers():
