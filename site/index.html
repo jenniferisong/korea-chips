@@ -1,0 +1,378 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Korea Chip Trade Tracker</title>
+<meta name="description" content="Where South Korea's chips and chipmaking tools go after US export controls on China — updated automatically from UN Comtrade.">
+<style>
+:root {
+  color-scheme: light;
+  --page: #f9f9f7;
+  --surface: #fcfcfb;
+  --ink: #0b0b0b;
+  --ink-2: #52514e;
+  --muted: #898781;
+  --grid: #e1e0d9;
+  --axis: #c3c2b7;
+  --border: rgba(11,11,11,0.10);
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100; --s5: #e87ba4;
+  --accent: #2a78d6;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink-2: #c3c2b7;
+    --muted: #898781; --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10);
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181;
+    --accent: #3987e5;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink-2: #c3c2b7;
+  --muted: #898781; --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10);
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181;
+  --accent: #3987e5;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--page); color: var(--ink);
+  font: 16px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+main { max-width: 960px; margin: 0 auto; padding: 32px 16px 64px; }
+h1 { font-size: 1.9rem; line-height: 1.2; margin: 0 0 8px; letter-spacing: -0.01em; }
+h2 { font-size: 1.15rem; margin: 0 0 4px; }
+p { margin: 0 0 12px; }
+.lede { color: var(--ink-2); max-width: 680px; }
+.meta { color: var(--muted); font-size: 0.85rem; margin-bottom: 24px; }
+.card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+  padding: 20px; margin-bottom: 20px;
+}
+.sub { color: var(--ink-2); font-size: 0.9rem; margin-bottom: 12px; }
+.picker { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 20px; }
+.picker label { font-weight: 600; font-size: 0.9rem; }
+select {
+  font: inherit; color: var(--ink); background: var(--surface);
+  border: 1px solid var(--axis); border-radius: 8px; padding: 6px 10px; max-width: 100%;
+}
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 20px; }
+.tile { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+.tile .k { color: var(--ink-2); font-size: 0.85rem; }
+.tile .v { font-size: 1.8rem; font-weight: 650; line-height: 1.2; margin: 4px 0; }
+.tile .d { color: var(--muted); font-size: 0.82rem; }
+.findings { margin: 0; padding-left: 20px; }
+.findings li { margin-bottom: 6px; }
+.chart { position: relative; width: 100%; }
+.chart svg { display: block; width: 100%; overflow: visible; }
+.chart text { font: 12px system-ui, -apple-system, "Segoe UI", sans-serif; fill: var(--muted); font-variant-numeric: tabular-nums; }
+.chart .lbl { fill: var(--ink-2); font-weight: 600; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 0 0 8px; padding: 0; list-style: none; font-size: 0.85rem; color: var(--ink-2); }
+.legend i { display: inline-block; width: 14px; height: 3px; border-radius: 2px; vertical-align: middle; margin-right: 6px; }
+.events { font-size: 0.8rem; color: var(--muted); margin-top: 8px; display: flex; flex-wrap: wrap; gap: 4px 14px; }
+.events b { color: var(--ink-2); }
+.tip {
+  position: absolute; pointer-events: none; background: var(--surface); color: var(--ink);
+  border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font-size: 0.8rem;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.12); white-space: nowrap; opacity: 0; transition: opacity .1s;
+  z-index: 2;
+}
+.tip .row { display: flex; gap: 8px; justify-content: space-between; align-items: center; }
+.tip .row span:last-child { font-variant-numeric: tabular-nums; font-weight: 600; }
+.tip i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+details { margin-top: 10px; font-size: 0.85rem; }
+summary { cursor: pointer; color: var(--accent); }
+.tablewrap { overflow-x: auto; max-height: 320px; margin-top: 8px; }
+table { border-collapse: collapse; font-variant-numeric: tabular-nums; width: 100%; }
+th, td { padding: 4px 8px; text-align: right; border-bottom: 1px solid var(--grid); white-space: nowrap; }
+th:first-child, td:first-child { text-align: left; }
+th { position: sticky; top: 0; background: var(--surface); color: var(--ink-2); }
+a { color: var(--accent); }
+.method p, .method li { color: var(--ink-2); font-size: 0.92rem; }
+.error { color: var(--ink-2); }
+footer { color: var(--muted); font-size: 0.82rem; margin-top: 32px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Korea Chip Trade Tracker</h1>
+  <p class="lede">Since 2022 the US has restricted chips and chipmaking tools bound for China. South Korea makes most of the world's memory chips and runs big factories inside China. This page tracks, month by month, where Korea's chips actually go and whether China's own records agree.</p>
+  <p class="meta" id="meta">Loading data…</p>
+
+  <div class="picker">
+    <label for="view">Product</label>
+    <select id="view"></select>
+  </div>
+
+  <div class="tiles" id="tiles"></div>
+
+  <section class="card">
+    <h2>What the latest data says</h2>
+    <ul class="findings" id="findings"></ul>
+  </section>
+
+  <section class="card">
+    <h2>Where Korea's exports go</h2>
+    <p class="sub">Korean customs data, US$ billions, 12-month rolling total.</p>
+    <ul class="legend" id="legend-dest"></ul>
+    <div class="chart" id="chart-dest"></div>
+    <div class="events" id="events-dest"></div>
+    <details><summary>Show as a table</summary><div class="tablewrap" id="table-dest"></div></details>
+  </section>
+
+  <section class="card">
+    <h2>The mirror gap: China's records vs Korea's</h2>
+    <p class="sub">Imports China records as made in Korea, per $1 Korea reports shipping straight to China. About 1.05 is normal (China counts freight and insurance). Higher means more Korean goods reach China through a third country.</p>
+    <div class="chart" id="chart-mirror"></div>
+    <div class="events" id="events-mirror"></div>
+    <details><summary>Show as a table</summary><div class="tablewrap" id="table-mirror"></div></details>
+  </section>
+
+  <section class="card">
+    <h2>Controlled goods vs ordinary goods</h2>
+    <p class="sub">Share of Korea's exports going to China and Hong Kong, 12-month rolling. Ordinary goods show how much is just the wider trade relationship.</p>
+    <ul class="legend" id="legend-share"></ul>
+    <div class="chart" id="chart-share"></div>
+    <div class="events" id="events-share"></div>
+    <details><summary>Show as a table</summary><div class="tablewrap" id="table-share"></div></details>
+  </section>
+
+  <section class="card method">
+    <h2>How this works</h2>
+    <p>Every week a GitHub Action downloads the latest monthly figures from the <a href="https://comtradeplus.un.org/">UN Comtrade</a> database, recomputes everything and republishes this page. Countries report with a delay of two to six months, so the newest months fill in over time.</p>
+    <ul>
+      <li><b>Products</b> use 6-digit HS codes: 848620 and 848690 (chipmaking equipment and parts), 854231, 854232 and 854239 (processors, memory and other chips). Cosmetics (330499) and auto parts (870899) are a comparison group not covered by the controls.</li>
+      <li><b>Southeast Asia</b> is Vietnam, Singapore and Malaysia. Taiwan appears in Comtrade as "Other Asia, nes".</li>
+      <li><b>The mirror gap</b> compares two records of the same trade. Korea logs exports by first destination; China logs imports by country of origin. Goods routed through Hong Kong or Singapore count as "to Hong Kong" in Korea's books and "from Korea" in China's, so the ratio rises when indirect routing grows. It is a signal to investigate, not proof of evasion: timing, valuation and classification differences also move it.</li>
+      <li>All values are 12-month rolling sums. China reports January and February together.</li>
+    </ul>
+    <p><a href="comtrade.csv" download>Download the raw data (CSV)</a></p>
+  </section>
+
+  <footer>Built with Python and plain SVG. Data: UN Comtrade (public preview API). Not affiliated with the UN or any government.</footer>
+</main>
+
+<div class="tip" id="tip"></div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+const SERIES_VARS = ["--s1", "--s2", "--s3", "--s4", "--s5"];
+const DEST = ["China", "Hong Kong", "Southeast Asia", "Taiwan", "United States"];
+const SHARE_VIEWS = ["chips", "tools", "hs330499", "hs870899"];
+let DATA = null;
+
+const fmtB = (v) => v == null ? "–" : "$" + (v / 1e9).toFixed(v >= 1e10 ? 0 : 1) + "B";
+const fmtPct = (v) => v == null ? "–" : v.toFixed(0) + "%";
+const fmtX = (v) => v == null ? "–" : v.toFixed(2) + "×";
+const monthName = (m) => {
+  const [y, mo] = m.split("-");
+  return new Date(+y, +mo - 1, 1).toLocaleString("en", { month: "short", year: "numeric" });
+};
+
+// Round axis step (1, 2, 2.5 or 5 × 10^n) so tick labels stay readable.
+function niceStep(range) {
+  if (!(range > 0)) return 0.25;
+  const raw = range / 4, p = Math.pow(10, Math.floor(Math.log10(raw)));
+  for (const s of [1, 2, 2.5, 5, 10]) if (s * p >= raw) return s * p;
+  return 10 * p;
+}
+
+function svgEl(tag, attrs, parent) {
+  const el = document.createElementNS("http://www.w3.org/2000/svg", tag);
+  for (const k in attrs) el.setAttribute(k, attrs[k]);
+  if (parent) parent.appendChild(el);
+  return el;
+}
+
+// One reusable line chart: shared x axis of months, one y axis, nulls break the line.
+function lineChart(host, { dates, series, fmt, ref, yMin }) {
+  host.innerHTML = "";
+  const W = host.clientWidth || 600;
+  const narrow = W < 560;
+  const H = narrow ? 240 : 300;
+  const showLabels = !narrow && series.length > 1;
+  const m = { t: 22, r: showLabels ? 112 : 12, b: 28, l: 46 };
+  const iw = W - m.l - m.r, ih = H - m.t - m.b;
+  const svg = svgEl("svg", { viewBox: `0 0 ${W} ${H}`, height: H, role: "img" }, host);
+
+  const all = series.flatMap((s) => s.values).filter((v) => v != null);
+  if (!all.length) {
+    const t = svgEl("text", { x: W / 2, y: H / 2, "text-anchor": "middle" }, svg);
+    t.textContent = "No data yet for this product.";
+    return;
+  }
+  const lo = yMin != null ? yMin : 0;
+  const step = niceStep(Math.max(...all, ref || 0) - lo);
+  const hi = lo + Math.ceil((Math.max(...all, ref || 0) - lo) / step) * step;
+  const x = (i) => m.l + (dates.length < 2 ? 0 : (i / (dates.length - 1)) * iw);
+  const y = (v) => m.t + ih - ((v - lo) / (hi - lo)) * ih;
+
+  // gridlines + y ticks
+  for (let v = lo; v <= hi + step / 2; v += step) {
+    svgEl("line", { x1: m.l, x2: m.l + iw, y1: y(v), y2: y(v), stroke: v === lo ? css("--axis") : css("--grid"), "stroke-width": 1 }, svg);
+    const t = svgEl("text", { x: m.l - 8, y: y(v) + 4, "text-anchor": "end" }, svg);
+    t.textContent = fmt(v, true);
+  }
+  // x ticks: every January, thinned on small screens
+  const years = dates.map((d, i) => [d, i]).filter(([d]) => d.endsWith("-01"));
+  const every = narrow && years.length > 4 ? 2 : 1;
+  years.forEach(([d, i], n) => {
+    if (n % every) return;
+    const t = svgEl("text", { x: x(i), y: H - 8, "text-anchor": "middle" }, svg);
+    t.textContent = d.slice(0, 4);
+  });
+
+  // policy events: dashed line + numbered marker
+  DATA.events.forEach((e, n) => {
+    const i = dates.indexOf(e.month);
+    if (i < 0) return;
+    svgEl("line", { x1: x(i), x2: x(i), y1: m.t, y2: m.t + ih, stroke: css("--axis"), "stroke-dasharray": "3 3" }, svg);
+    svgEl("circle", { cx: x(i), cy: m.t - 10, r: 8, fill: css("--surface"), stroke: css("--axis") }, svg);
+    const t = svgEl("text", { x: x(i), y: m.t - 6, "text-anchor": "middle", class: "lbl" }, svg);
+    t.textContent = n + 1;
+  });
+
+  if (ref != null) {
+    svgEl("line", { x1: m.l, x2: m.l + iw, y1: y(ref), y2: y(ref), stroke: css("--muted"), "stroke-width": 1 }, svg);
+    const t = svgEl("text", { x: m.l + iw - 4, y: y(ref) - 6, "text-anchor": "end" }, svg);
+    t.textContent = "normal ≈ " + fmt(ref);
+  }
+
+  // lines
+  series.forEach((s) => {
+    let d = "", pen = false;
+    s.values.forEach((v, i) => {
+      if (v == null) { pen = false; return; }
+      d += (pen ? "L" : "M") + x(i).toFixed(1) + "," + y(v).toFixed(1);
+      pen = true;
+    });
+    svgEl("path", { d, fill: "none", stroke: s.color, "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round" }, svg);
+  });
+
+  // direct labels at the last point, nudged apart so they never overlap
+  if (showLabels) {
+    const ends = series.map((s) => {
+      let i = s.values.length - 1;
+      while (i >= 0 && s.values[i] == null) i--;
+      return i < 0 ? null : { s, i, yy: y(s.values[i]) };
+    }).filter(Boolean).sort((a, b) => a.yy - b.yy);
+    for (let k = 1; k < ends.length; k++) ends[k].yy = Math.max(ends[k].yy, ends[k - 1].yy + 14);
+    ends.forEach((e) => {
+      const t = svgEl("text", { x: m.l + iw + 8, y: e.yy + 4, class: "lbl" }, svg);
+      t.textContent = e.s.name;
+    });
+  }
+
+  // hover layer: crosshair, dots, tooltip
+  const cross = svgEl("line", { y1: m.t, y2: m.t + ih, stroke: css("--muted"), "stroke-width": 1, opacity: 0 }, svg);
+  const dots = series.map((s) => svgEl("circle", { r: 4.5, fill: s.color, stroke: css("--surface"), "stroke-width": 2, opacity: 0 }, svg));
+  const hit = svgEl("rect", { x: m.l, y: 0, width: iw, height: H, fill: "transparent" }, svg);
+  const tip = $("tip");
+  const move = (ev) => {
+    const r = svg.getBoundingClientRect();
+    const px = ((ev.clientX - r.left) / r.width) * W;
+    const i = Math.max(0, Math.min(dates.length - 1, Math.round(((px - m.l) / iw) * (dates.length - 1))));
+    cross.setAttribute("x1", x(i)); cross.setAttribute("x2", x(i)); cross.setAttribute("opacity", 1);
+    series.forEach((s, k) => {
+      const v = s.values[i];
+      dots[k].setAttribute("opacity", v == null ? 0 : 1);
+      if (v != null) { dots[k].setAttribute("cx", x(i)); dots[k].setAttribute("cy", y(v)); }
+    });
+    const ev2 = DATA.events.find((e) => e.month === dates[i]);
+    tip.innerHTML = `<div style="font-weight:600;margin-bottom:4px">12 months to ${monthName(dates[i])}</div>` +
+      series.map((s) => `<div class="row"><span><i style="background:${s.color}"></i>${s.name}</span><span>${fmt(s.values[i])}</span></div>`).join("") +
+      (ev2 ? `<div style="margin-top:4px;color:var(--ink-2)">${ev2.label}</div>` : "");
+    tip.style.opacity = 1;
+    const tw = tip.offsetWidth, th = tip.offsetHeight;
+    let left = ev.pageX + 14, top = ev.pageY - th - 12;
+    if (left + tw > window.scrollX + document.documentElement.clientWidth - 8) left = ev.pageX - tw - 14;
+    if (top < window.scrollY + 8) top = ev.pageY + 16;
+    tip.style.left = left + "px"; tip.style.top = top + "px";
+  };
+  const leave = () => {
+    tip.style.opacity = 0; cross.setAttribute("opacity", 0);
+    dots.forEach((d) => d.setAttribute("opacity", 0));
+  };
+  hit.addEventListener("pointermove", move);
+  hit.addEventListener("pointerdown", move);
+  hit.addEventListener("pointerleave", leave);
+}
+
+function legend(id, series) {
+  $(id).innerHTML = series.map((s) => `<li><i style="background:${s.color}"></i>${s.name}</li>`).join("");
+}
+
+function eventsKey(id) {
+  $(id).innerHTML = DATA.events.map((e, n) => `<span><b>${n + 1}</b> ${monthName(e.month)}: ${e.label}</span>`).join("");
+}
+
+function table(id, dates, series, fmt) {
+  const rows = dates.map((d, i) => [d, ...series.map((s) => s.values[i])]).reverse();
+  $(id).innerHTML = `<table><thead><tr><th>12 months to</th>${series.map((s) => `<th>${s.name}</th>`).join("")}</tr></thead><tbody>` +
+    rows.map((r) => `<tr><td>${monthName(r[0])}</td>${r.slice(1).map((v) => `<td>${fmt(v)}</td>`).join("")}</tr>`).join("") +
+    "</tbody></table>";
+}
+
+function lastValid(arr) {
+  for (let i = arr.length - 1; i >= 0; i--) if (arr[i] != null) return [arr[i], i];
+  return [null, -1];
+}
+
+function tiles(v) {
+  const base = v.dates.indexOf(DATA.baseline_end);
+  const [cn, ci] = lastValid(v.destinations["China"]);
+  const [sh, si] = lastValid(v.china_hk_share);
+  const [mr, mi] = lastValid(v.mirror);
+  const at = (arr, i) => (i >= 0 ? arr[i] : null);
+  const card = (k, val, d) => `<div class="tile"><div class="k">${k}</div><div class="v">${val}</div><div class="d">${d}</div></div>`;
+  $("tiles").innerHTML =
+    card("Exports to China, last 12 months", fmtB(cn), ci >= 0 ? `to ${monthName(v.dates[ci])} · before controls ${fmtB(at(v.destinations["China"], base))}` : "") +
+    card("Share to China + Hong Kong", fmtPct(sh), si >= 0 ? `before controls ${fmtPct(at(v.china_hk_share, base))}` : "") +
+    card("Mirror ratio", fmtX(mr), mi >= 0 ? `to ${monthName(v.dates[mi])} · before controls ${fmtX(at(v.mirror, base))}` : "");
+}
+
+function render() {
+  const key = $("view").value;
+  const v = DATA.views[key];
+  const colors = SERIES_VARS.map(css);
+
+  tiles(v);
+  $("findings").innerHTML = v.findings.length ? v.findings.map((f) => `<li>${f}</li>`).join("") : "<li>Not enough data yet.</li>";
+
+  const dest = DEST.map((name, k) => ({ name, values: v.destinations[name], color: colors[k] }));
+  legend("legend-dest", dest);
+  lineChart($("chart-dest"), { dates: v.dates, series: dest, fmt: (val, axis) => val == null ? "–" : axis ? "$" + +(val / 1e9).toFixed(1) + "B" : fmtB(val) });
+  table("table-dest", v.dates, dest, fmtB);
+
+  const mirror = [{ name: "Mirror ratio", values: v.mirror, color: colors[0] }];
+  lineChart($("chart-mirror"), { dates: v.dates, series: mirror, fmt: (val, axis) => val == null ? "–" : val.toFixed(axis ? 1 : 2) + "×", ref: 1.05 });
+  table("table-mirror", v.dates, mirror, fmtX);
+
+  const sv = DATA.views[SHARE_VIEWS[0]];
+  const share = SHARE_VIEWS.map((k, n) => ({ name: DATA.views[k].label, values: DATA.views[k].china_hk_share, color: colors[n] }));
+  legend("legend-share", share);
+  lineChart($("chart-share"), { dates: sv.dates, series: share, fmt: (val) => val == null ? "–" : val.toFixed(0) + "%" });
+  table("table-share", sv.dates, share, fmtPct);
+}
+
+fetch("data.json").then((r) => r.json()).then((d) => {
+  DATA = d;
+  $("meta").textContent = `Korea data through ${monthName(d.korea_data_through)} · China data through ${monthName(d.china_data_through)} · Updated ${d.generated}`;
+  const groups = { controlled: "Controlled goods", baseline: "Comparison goods" };
+  $("view").innerHTML = Object.entries(groups).map(([g, label]) =>
+    `<optgroup label="${label}">` +
+    Object.entries(d.views).filter(([, v]) => v.group === g).map(([k, v]) => `<option value="${k}">${v.label}${v.codes.length === 1 ? " (" + v.codes[0] + ")" : ""}</option>`).join("") +
+    "</optgroup>").join("");
+  $("view").addEventListener("change", render);
+  ["events-dest", "events-mirror", "events-share"].forEach(eventsKey);
+  render();
+  let t; window.addEventListener("resize", () => { clearTimeout(t); t = setTimeout(render, 150); });
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", render);
+}).catch(() => {
+  $("meta").innerHTML = '<span class="error">Could not load the data. Try reloading the page.</span>';
+});
+</script>
+</body>
+</html>
