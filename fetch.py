@@ -1,9 +1,10 @@
 """Download monthly trade data from the UN Comtrade public API into data/comtrade.csv.
 
-Uses the free preview endpoint (no API key), which allows a limited number of
-calls per day. Each call asks for several months at once, and months already
-in the cache are skipped unless they fall inside the REFRESH_MONTHS revision
-window, so a weekly run makes only a handful of calls.
+Uses the free preview endpoint (no API key). It takes one month per call and
+allows a limited number of calls per day, so months already in the cache are
+skipped unless they fall inside the REFRESH_MONTHS revision window: a weekly
+run makes about 30 calls. If the daily quota runs out, progress is saved and
+the next run continues where this one stopped.
 """
 
 import csv
@@ -39,11 +40,11 @@ class QuotaExceeded(Exception):
     """The free API's daily request allowance is used up."""
 
 
-def request(query, periods):
-    """One API call: one reporter, several months, all partners and products."""
+def request(query, period):
+    """One API call: one reporter, one month, all partners and products."""
     params = {
         "reporterCode": query["reporter"],
-        "period": ",".join(periods),
+        "period": period,
         "partnerCode": ",".join(map(str, query["partners"])),
         "cmdCode": ",".join(config.PRODUCTS),
         "flowCode": query["flow"],
@@ -58,7 +59,7 @@ def request(query, periods):
             with urllib.request.urlopen(url, timeout=120) as resp:
                 body = json.load(resp)
             if body.get("count", 0) >= MAX_ROWS:
-                raise RuntimeError("hit the 500-row cap; lower MONTHS_PER_CALL")
+                raise RuntimeError("hit the 500-row cap; track fewer partners or products")
             return body.get("data") or []
         except urllib.error.HTTPError as err:
             if err.code == 403:
@@ -68,7 +69,7 @@ def request(query, periods):
         except (urllib.error.URLError, TimeoutError):
             pass
         time.sleep(2 ** (attempt + 2))
-    raise RuntimeError(f"gave up on {query['reporter']} {periods[0]}-{periods[-1]}")
+    raise RuntimeError(f"gave up on {query['reporter']} {period}")
 
 
 def to_rows(records, query):
@@ -89,12 +90,6 @@ def to_rows(records, query):
     return rows
 
 
-def months_per_call(query):
-    """As many months as fit under the API's 500-row cap."""
-    per_month = len(query["partners"]) * len(config.PRODUCTS)
-    return max(1, min(12, (MAX_ROWS - 1) // per_month))
-
-
 def load_cache():
     if not CACHE.exists():
         return []
@@ -113,20 +108,18 @@ def main():
     fetched, failures, quota_hit = [], 0, False
     for q in config.QUERIES:
         todo = [p for p in all_months if p in refresh or (str(q["reporter"]), p) not in have]
-        step = months_per_call(q)
-        for i in range(0, len(todo), step):
-            chunk = todo[i:i + step]
+        for period in todo:
             try:
-                rows = to_rows(request(q, chunk), q)
+                rows = to_rows(request(q, period), q)
             except QuotaExceeded:
                 quota_hit = True
                 break
-            except Exception as err:  # keep going; the old cache still covers these months
-                print(f"  failed {q['reporter']} {chunk[0]}-{chunk[-1]}: {err}", file=sys.stderr)
+            except Exception as err:  # keep going; the old cache still covers this month
+                print(f"  failed {q['reporter']} {period}: {err}", file=sys.stderr)
                 failures += 1
                 continue
             fetched.extend(rows)
-            print(f"  {q['reporter']} {chunk[0]}-{chunk[-1]}: {len(rows)} rows")
+            print(f"  {q['reporter']} {period}: {len(rows)} rows")
             time.sleep(PAUSE_SECONDS)
         if quota_hit:
             break

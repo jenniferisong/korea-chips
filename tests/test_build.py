@@ -63,15 +63,15 @@ def test_findings_mention_the_numbers():
     assert "$12.0B" in text and "0% up" in text
 
 
-def test_fetch_batches_months_and_stops_on_quota(tmp_path, monkeypatch):
+def test_fetch_stops_at_quota_and_saves_progress(tmp_path, monkeypatch):
     calls = []
 
-    def fake_request(query, periods):
-        calls.append((query["reporter"], list(periods)))
-        if len(calls) == 3:
+    def fake_request(query, period):
+        calls.append((query["reporter"], period))
+        if len(calls) == 4:
             raise fetch.QuotaExceeded("Quota Exceeded")
-        return [{"period": p, "partnerCode": query["partners"][0], "cmdCode": "854232",
-                 "primaryValue": 1.0} for p in periods]
+        return [{"period": period, "partnerCode": query["partners"][0], "cmdCode": "854232",
+                 "primaryValue": 1.0}]
 
     monkeypatch.setattr(fetch, "request", fake_request)
     monkeypatch.setattr(fetch, "CACHE", tmp_path / "comtrade.csv")
@@ -79,9 +79,7 @@ def test_fetch_batches_months_and_stops_on_quota(tmp_path, monkeypatch):
     monkeypatch.setattr(fetch.config, "START_PERIOD", "202001")
     fetch.main()
 
-    china, korea = fetch.config.QUERIES
-    assert fetch.months_per_call(china) == 12 and fetch.months_per_call(korea) == 8
-    assert [len(p) for _, p in calls[:2]] == [12, 12]
-    assert len(calls) == 3  # stopped at the quota instead of hammering the API
+    assert calls[:3] == [(156, "202001"), (156, "202002"), (156, "202003")]  # China first
+    assert len(calls) == 4  # stopped at the quota instead of hammering the API
     saved = (tmp_path / "comtrade.csv").read_text().splitlines()
-    assert len(saved) == 1 + 24 and saved[1].startswith("202001,156,M,410,854232")
+    assert len(saved) == 1 + 3 and saved[1].startswith("202001,156,M,410,854232")
